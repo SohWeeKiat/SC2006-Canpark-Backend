@@ -13,7 +13,12 @@ class DataGov:
 	def GetCarparkAvailability(timestamp):
 		resp = requests.get(Config.Config.CarparkAvail_URL, params=\
 		{'date_time': timestamp}).json()
-		print(resp)
 		if len(resp["items"]) <= 0:
 			return []
 		return resp['items'][0]['carpark_data']
+
+	def ConvertSVY21_WGS84(X, Y):
+		resp = requests.get(Config.Config.OneMapConvertSVY21_WGS84,params=\
+		{'X': X, 'Y': Y}).json()
+		print(resp)
+		return resp["latitude"], resp["longitude"]
