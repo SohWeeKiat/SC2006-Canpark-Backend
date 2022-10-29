@@ -13,7 +13,10 @@ class DataGov:
 	def GetCarparkAvailability(timestamp):
 		resp = requests.get(Config.Config.CarparkAvail_URL, params=\
 		{'date_time': timestamp}).json()
-		if len(resp["items"]) <= 0:
+		if 'items' not in resp.keys():
+			print(f"Failed to get data for {timestamp}, retrying")
+			return DataGov.GetCarparkAvailability(timestamp)
+		elif len(resp["items"]) <= 0:
 			return []
 		return resp['items'][0]['carpark_data']
 

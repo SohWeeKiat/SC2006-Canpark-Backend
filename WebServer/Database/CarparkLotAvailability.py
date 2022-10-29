@@ -1,4 +1,5 @@
 from . import db
+from sqlalchemy.orm import relationship
 
 class CarparkLotAvailability(db.Model):
 	__tablename__ = 'CarparkLotAvailabilities'
@@ -9,6 +10,9 @@ class CarparkLotAvailability(db.Model):
 	lots_available = db.Column(db.Integer, nullable=False)
 	lot_type = db.Column(db.String(100), nullable=False)
 	update_datetime = db.Column(db.DATETIME, nullable=True)
+
+	carpark = relationship("Carpark", back_populates="carpark_lot_records")
+	RecordDateEntry = relationship("CarparkLotRecordDate", back_populates="carpark_lot_records")
 
 	def __init__(self, RecordDateId, car_park_no, total_lots, lots_available,\
 	lot_type, update_datetime):

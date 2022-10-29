@@ -5,9 +5,24 @@ from .Database.CarparkLotAvailability import CarparkLotAvailability
 from .Database import db
 from . import app
 from .GovAPI import DataGov
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta,timezone
+import pytz
 
 CarparkData = {}
+CarparkHistory = {}
+
+def GrabCarparkLotRecords(dt):
+	record_date = CarparkLotRecordDate(dt.astimezone(pytz.UTC))
+	record_date.Insert()
+	data = DataGov.GetCarparkAvailability(dt.isoformat())
+	for cp in data:
+		if len(cp['carpark_info']) <= 0:
+			continue
+		info = cp['carpark_info'][0]
+		cpa = CarparkLotAvailability(record_date.Id, cp['carpark_number'],
+		info['total_lots'], info['lots_available'], info['lot_type'],
+		datetime.fromisoformat(cp['update_datetime']).astimezone(pytz.UTC))
+		cpa.Insert()
 
 def InitializeDB():
 	print("InitializeDB")
@@ -27,49 +42,44 @@ def InitializeDB():
 			db.session.commit()
 		if CarparkLotRecordDate.GetCount() <= 0:
 			cur_date_time = datetime.now()
-			cur_date_time = cur_date_time.replace(minute=0, second=0)
-			for past_hr in range(0, 3 * 24):
-				record_date = CarparkLotRecordDate(cur_date_time)
-				record_date.Insert()
-				data = DataGov.GetCarparkAvailability(cur_date_time.isoformat())
-				for cp in data:
-					if len(cp['carpark_info']) <= 0:
-						continue
-					info = cp['carpark_info'][0]
-					cpa = CarparkLotAvailability(record_date.Id, cp['carpark_number'],
-					info['total_lots'], info['lots_available'], info['lot_type'],
-					datetime.fromisoformat(cp['update_datetime']))
-					cpa.Insert()
+			cur_date_time = cur_date_time.replace(minute=0, second=0, microsecond=0)
+			cur_date_time = cur_date_time.astimezone(pytz.timezone('Asia/Singapore'))
+			for past_hr in range(0, 8 * 24):
+				GrabCarparkLotRecords(cur_date_time)
 				cur_date_time -= timedelta(hours=1)
 			db.session.commit()
+		GrabWeeklyCarparklots()
+		#Carpark.GetCarparksTest()
 	GrabLatestCarparklots()
 
 def GrabLatestCarparklots():
 	print("Updating carpark lots")
-	data = DataGov.GetCarparkAvailability(datetime.now().isoformat())
+	data = DataGov.GetCarparkAvailability(datetime.now().astimezone(pytz.timezone('Asia/Singapore')).isoformat())
 	for cp in data:
 		if len(cp['carpark_info']) <= 0:
 			continue
 		info = cp['carpark_info'][0]
 		cpa = CarparkLotAvailability(0, cp['carpark_number'],
 		info['total_lots'], info['lots_available'], info['lot_type'],
-		datetime.fromisoformat(cp['update_datetime']))
+		datetime.fromisoformat(cp['update_datetime']).astimezone(pytz.UTC))
 		CarparkData[cp['carpark_number']] = cpa
+
+def GrabWeeklyCarparklots():
+	with app.app_context():
+		all_carparks = Carpark.GetAllCarparks()
+		for cp in all_carparks:
+			history_hours, history_data = cp.GetPast7DaysSlots()
+			CarparkHistory[cp.car_park_no] = {
+				"start_date":history_hours[0][0],
+				"end_date": history_hours[len(history_hours) - 1][0],
+				"data":history_data
+			}
 
 def HourlyDBUpdate():
 	print("HourlyDBUpdate")
 	with app.app_context():
 		cur_date_time = datetime.now()
-		cur_date_time = cur_date_time.replace(minute=0, second=0)
-		record_date = CarparkLotRecordDate(cur_date_time)
-		record_date.Insert()
-		data = DataGov.GetCarparkAvailability(cur_date_time.isoformat())
-		for cp in data:
-			if len(cp['carpark_info']) <= 0:
-				continue
-			info = cp['carpark_info'][0]
-			cpa = CarparkLotAvailability(record_date.Id, cp['carpark_number'],
-			info['total_lots'], info['lots_available'], info['lot_type'],
-			datetime.fromisoformat(cp['update_datetime']))
-			cpa.Insert()
+		cur_date_time = cur_date_time.replace(minute=0, second=0, microsecond=0)
+		cur_date_time = cur_date_time.astimezone(pytz.timezone('Asia/Singapore'))
+		GrabCarparkLotRecords(cur_date_time)
 		db.session.commit()

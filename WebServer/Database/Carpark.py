@@ -1,5 +1,11 @@
 from . import db
 from geopy import distance
+from sqlalchemy.orm import relationship
+from sqlalchemy.orm import lazyload, joinedload,contains_eager
+from datetime import datetime, timedelta,timezone
+import pytz
+from . import CarparkLotRecordDate
+from . import CarparkLotAvailability
 
 class Carpark(db.Model):
 	__tablename__ = 'Carparks'
@@ -17,6 +23,8 @@ class Carpark(db.Model):
 	car_park_basement = db.Column(db.String(100), nullable=False)
 	long_coord = db.Column(db.Float, nullable=False)
 	lat_coord = db.Column(db.Float, nullable=False)
+
+	carpark_lot_records = relationship("CarparkLotAvailability", back_populates="carpark")
 
 	def __init__(self, car_park_no, address, x_coord, y_coord, car_park_type,\
 	type_of_parking_system, short_term_parking, free_parking, night_parking,\
@@ -40,14 +48,81 @@ class Carpark(db.Model):
 	def Insert(self):
 		db.session.add(self)
 
+	def GetPast7DaysSlots(self):
+		from . import CarparkLotRecordDate
+		from . import CarparkLotAvailability
+		sg = pytz.timezone('Asia/Singapore')
+
+		end_date = datetime.now()
+		end_date = end_date.astimezone(pytz.timezone('Asia/Singapore'))\
+		.replace(hour=0, minute=0, second=0, microsecond=0)
+		day_of_week = end_date.weekday()
+		if day_of_week != 0:#not sunday
+			end_date -= timedelta(days = day_of_week)
+
+		end_date = end_date.astimezone(pytz.UTC)
+		start_date = end_date - timedelta(days=7)
+
+		#list = self.carpark_lot_records\
+		#.join(CarparkLotAvailability.RecordDateEntry)\
+		#.filter(CarparkLotRecordDate.RecordDate >= start_date,CarparkLotRecordDate.RecordDate <= end_date)\
+		#.order_by(CarparkLotRecordDate.RecordDate)\
+		#.all()
+		list = self.carpark_lot_records
+		collection_of_data = []
+		collection_of_hours = []
+		hours = []
+		data = []
+		utc=pytz.UTC
+		for hour_offset in range(0, 7 * 24):
+			start_time = start_date + timedelta(hours=hour_offset)
+			end_time = start_time + timedelta(seconds=1)
+			if len(data) >= 24:
+				collection_of_data.append(data)
+				collection_of_hours.append(hours)
+				data = []
+				hours = []
+			added = False
+			for e in list:
+				utc_dt = utc.localize(e.RecordDateEntry.RecordDate)
+				#print(utc_dt.isoformat())
+				if utc_dt >= start_time and \
+				utc_dt <= end_time:
+					hours.append(start_time.astimezone(sg).strftime("%m/%d/%Y, %H:%M:%S"))
+					data.append(e.lots_available)
+					added = True
+					break
+			if not added:
+				#print("Failed to find " + start_time.isoformat())
+				hours.append(start_time.astimezone(sg).strftime("%m/%d/%Y, %H:%M:%S"))
+				data.append(0)
+		collection_of_data.append(data)
+		collection_of_hours.append(hours)
+		return collection_of_hours, collection_of_data
+
 	def GetCount():
 		return db.session.query(db.func.count(Carpark.car_park_no)).all()[0][0]
 
 	def GetCarparks(long, lat):
 		final_list = []
-		list = db.session.query(Carpark).all()
+		list = db.session.query(Carpark)\
+		.options(lazyload(Carpark.carpark_lot_records))\
+		.all()
 		for c in list:
 			c.dist = distance.distance((lat, long), (c.lat_coord, c.long_coord)).km
 			if c.dist < 5:
 				final_list.append(c)
 		return final_list
+
+	def GetAllCarparks():
+		return db.session.query(Carpark).options(joinedload(Carpark.carpark_lot_records)).all()
+
+	def GetCarpark(id):
+		return db.session.query(Carpark).options(lazyload(Carpark.carpark_lot_records))\
+		.filter(Carpark.car_park_no == id).one()
+
+	def GetCarparksTest():
+		print(datetime.now())
+		list = db.session.query(Carpark).options(lazyload(Carpark.carpark_lot_records)).all()
+		print(datetime.now())
+		list[0].GetPast7DaysSlots()
