@@ -48,19 +48,22 @@ class Carpark(db.Model):
 	def Insert(self):
 		db.session.add(self)
 
-	def GetPast7DaysSlots(self):
-		from . import CarparkLotRecordDate
-		from . import CarparkLotAvailability
-		sg = pytz.timezone('Asia/Singapore')
-
+	def GetPerfectLastDayOfWeek():
 		end_date = datetime.now()
 		end_date = end_date.astimezone(pytz.timezone('Asia/Singapore'))\
 		.replace(hour=0, minute=0, second=0, microsecond=0)
 		day_of_week = end_date.weekday()
 		if day_of_week != 0:#not sunday
 			end_date -= timedelta(days = day_of_week)
-
 		end_date = end_date.astimezone(pytz.UTC)
+		return end_date
+
+	def GetPast7DaysSlots(self):
+		from . import CarparkLotRecordDate
+		from . import CarparkLotAvailability
+		sg = pytz.timezone('Asia/Singapore')
+
+		end_date = Carpark.GetPerfectLastDayOfWeek()
 		start_date = end_date - timedelta(days=7)
 
 		#list = self.carpark_lot_records\
@@ -105,8 +108,14 @@ class Carpark(db.Model):
 
 	def GetCarparks(long, lat):
 		final_list = []
+		n_pt = distance.distance(kilometers=5).destination((lat, long), bearing=0)
+		east_pt = distance.distance(kilometers=5).destination((lat, long), bearing=90)
+		s_pt = distance.distance(kilometers=5).destination((lat, long), bearing=180)
+		west_pt = distance.distance(kilometers=5).destination((lat, long), bearing=270)
+
 		list = db.session.query(Carpark)\
 		.options(lazyload(Carpark.carpark_lot_records))\
+		.filter(Carpark.lat_coord <= n_pt.latitude, Carpark.lat_coord >= s_pt.latitude,Carpark.long_coord >= west_pt.longitude, Carpark.long_coord <= east_pt.longitude)\
 		.all()
 		for c in list:
 			c.dist = distance.distance((lat, long), (c.lat_coord, c.long_coord)).km
@@ -115,7 +124,14 @@ class Carpark(db.Model):
 		return final_list
 
 	def GetAllCarparks():
-		return db.session.query(Carpark).options(joinedload(Carpark.carpark_lot_records)).all()
+		from . import CarparkLotRecordDate
+		from . import CarparkLotAvailability
+		end_date = Carpark.GetPerfectLastDayOfWeek() + timedelta(days=1)
+		start_date = end_date - timedelta(days=9)#buffer 2 days
+		return db.session.query(Carpark).join(Carpark.carpark_lot_records)\
+		.join(CarparkLotAvailability.RecordDateEntry)\
+		.options(contains_eager("carpark_lot_records")).filter(CarparkLotRecordDate.RecordDate >= start_date,\
+		CarparkLotRecordDate.RecordDate <= end_date).all()
 
 	def GetCarpark(id):
 		return db.session.query(Carpark).options(lazyload(Carpark.carpark_lot_records))\

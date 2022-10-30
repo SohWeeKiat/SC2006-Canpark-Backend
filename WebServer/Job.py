@@ -7,9 +7,47 @@ from . import app
 from .GovAPI import DataGov
 from datetime import datetime, timedelta,timezone
 import pytz
+import logging
 
 CarparkData = {}
 CarparkHistory = {}
+CarparkView = {}
+
+def InsertCarparkView(car_park_no, UUID):
+	if car_park_no not in CarparkView.keys():
+		CarparkView[car_park_no] = []
+		CarparkView[car_park_no].append({
+			"UUID" : UUID,
+			"last_view_time": datetime.now()
+		})
+	else:
+		found = False
+		count = len(CarparkView[car_park_no])
+		for index in range(0, count):
+			if CarparkView[car_park_no][index]["UUID"] == UUID:
+				found = True
+				CarparkView[car_park_no][index] = {
+					"UUID" : UUID,
+					"last_view_time": datetime.now()
+				}
+				break
+		if not found:
+			CarparkView[car_park_no].append({
+				"UUID" : UUID,
+				"last_view_time": datetime.now()
+			})
+
+
+def RemoveLast30minsView():
+	cur_date_time = datetime.now()
+	for cp_name in CarparkView.keys():
+		count = len(CarparkView[cp_name])
+		indexes_to_be_removed = []
+		for index in range(0, count):
+			if (cur_date_time - CarparkView[car_park_no][index]["last_view_time"]).total_seconds() / 60 > 30:
+				 indexes_to_be_removed.append(index)
+		for index in reversed(indexes_to_be_removed):
+			CarparkView[car_park_no].pop(index)
 
 def GrabCarparkLotRecords(dt):
 	record_date = CarparkLotRecordDate(dt.astimezone(pytz.UTC))
@@ -48,7 +86,8 @@ def InitializeDB():
 				GrabCarparkLotRecords(cur_date_time)
 				cur_date_time -= timedelta(hours=1)
 			db.session.commit()
-		GrabWeeklyCarparklots()
+		if len(CarparkHistory) <= 0:
+			GrabWeeklyCarparklots()
 		#Carpark.GetCarparksTest()
 	GrabLatestCarparklots()
 
@@ -63,11 +102,13 @@ def GrabLatestCarparklots():
 		info['total_lots'], info['lots_available'], info['lot_type'],
 		datetime.fromisoformat(cp['update_datetime']).astimezone(pytz.UTC))
 		CarparkData[cp['carpark_number']] = cpa
+	RemoveLast30minsView()
 
 def GrabWeeklyCarparklots():
 	with app.app_context():
 		all_carparks = Carpark.GetAllCarparks()
 		for cp in all_carparks:
+			#logging.info("Prepping " + cp.car_park_no)
 			history_hours, history_data = cp.GetPast7DaysSlots()
 			CarparkHistory[cp.car_park_no] = {
 				"start_date":history_hours[0][0],

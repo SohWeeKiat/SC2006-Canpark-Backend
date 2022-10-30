@@ -3,8 +3,10 @@ from flask_apscheduler import APScheduler
 from .Database import db, Carpark
 from datetime import datetime, timedelta
 from logging.config import dictConfig
+import logging
 import os
 import pytz
+from flask_compress import Compress
 
 app = None
 
@@ -29,12 +31,15 @@ dictConfig({
         'handlers': ['wsgi', 'custom_handler']
     }
 })
+#logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
 
 def create_app():
 	global app
+	compress = Compress()
 	app = Flask(__name__, instance_relative_config=False)
 	app.config.from_object('Config.Config')
 	app.app_context().push()
+	compress.init_app(app)
 	db.init_app(app)
 	scheduler = APScheduler()
 	scheduler.init_app(app)
