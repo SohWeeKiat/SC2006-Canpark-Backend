@@ -12,6 +12,7 @@ import logging
 CarparkData = {}
 CarparkHistory = {}
 CarparkView = {}
+CarparkAvgMovement = {}
 
 def InsertCarparkView(car_park_no, UUID):
 	if car_park_no not in CarparkView.keys():
@@ -44,10 +45,10 @@ def RemoveLast30minsView():
 		count = len(CarparkView[cp_name])
 		indexes_to_be_removed = []
 		for index in range(0, count):
-			if (cur_date_time - CarparkView[car_park_no][index]["last_view_time"]).total_seconds() / 60 > 30:
+			if (cur_date_time - CarparkView[cp_name][index]["last_view_time"]).total_seconds() / 60 > 30:
 				 indexes_to_be_removed.append(index)
 		for index in reversed(indexes_to_be_removed):
-			CarparkView[car_park_no].pop(index)
+			CarparkView[cp_name].pop(index)
 
 def GrabCarparkLotRecords(dt):
 	record_date = CarparkLotRecordDate(dt.astimezone(pytz.UTC))
@@ -90,6 +91,7 @@ def InitializeDB():
 			GrabWeeklyCarparklots()
 		#Carpark.GetCarparksTest()
 	GrabLatestCarparklots()
+	GrabAvgCarparklotsMovement()
 
 def GrabLatestCarparklots():
 	print("Updating carpark lots")
@@ -103,6 +105,33 @@ def GrabLatestCarparklots():
 		datetime.fromisoformat(cp['update_datetime']).astimezone(pytz.UTC))
 		CarparkData[cp['carpark_number']] = cpa
 	RemoveLast30minsView()
+
+def GrabAvgCarparklotsMovement():
+	print("GrabAvgCarparklotsMovement")
+	if len(CarparkAvgMovement) == 0:
+		cur_time = datetime.now().astimezone(pytz.timezone('Asia/Singapore')).replace(minute=0, second=0, microsecond=0)
+		HistoryMovement = []
+		for i in range(0, 5):
+			minutesToRemove = 30 * i
+			target_time = cur_time - timedelta(minutes=minutesToRemove)
+			data = DataGov.GetCarparkAvailability(target_time.isoformat())
+			for cp in data:
+				if len(cp['carpark_info']) <= 0:
+					continue
+				info = cp['carpark_info'][0]
+				if cp['carpark_number'] in CarparkAvgMovement.keys():
+					CarparkAvgMovement[cp['carpark_number']].append(int(info['lots_available']))
+				else:
+					CarparkAvgMovement[cp['carpark_number']] = [int(info['lots_available'])]
+	else:
+		data = DataGov.GetCarparkAvailability(datetime.now().astimezone(pytz.timezone('Asia/Singapore')).isoformat())
+		for cp in data:
+			if len(cp['carpark_info']) <= 0:
+				continue
+			info = cp['carpark_info'][0]
+			if cp['carpark_number'] in CarparkAvgMovement:
+				CarparkAvgMovement[cp['carpark_number']].pop(0)
+				CarparkAvgMovement[cp['carpark_number']].append(info['lots_available'])
 
 def GrabWeeklyCarparklots():
 	with app.app_context():

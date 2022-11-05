@@ -32,8 +32,17 @@ def GetCarparks():
 			update_datetime = data.update_datetime.isoformat()
 		else:
 			continue
+		history = {}
+		avg = 0
 		if c.car_park_no in Job.CarparkHistory.keys():
 			history = Job.CarparkHistory[c.car_park_no]
+		#print(Job.CarparkAvgMovement)
+		if c.car_park_no in Job.CarparkAvgMovement.keys():
+			list = Job.CarparkAvgMovement[c.car_park_no]
+			CarValueChanges = []
+			for i in range(0, len(list) - 1):
+				avg += list[i + 1] - list[i]
+			avg = avg // (len(list) - 1)
 		if c.car_park_no in Job.CarparkView.keys():
 			viewing_now = len(Job.CarparkView[c.car_park_no])
 
@@ -49,6 +58,7 @@ def GetCarparks():
 			"night_parking": c.night_parking,
 			"viewing_now": viewing_now,
 			"dist":c.dist,
+			"changePer30min":avg,
 			"history": history
 		})
 	#final_list.sort(key=lambda x: x["dist"])

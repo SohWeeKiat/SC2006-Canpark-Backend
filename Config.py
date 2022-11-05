@@ -14,6 +14,13 @@ class Config:
             'args': (),
             'trigger': 'interval',
             'seconds': 60
+        },
+		{
+            'id': 'GrabAvgCarparklotsMovement',
+            'func': 'WebServer.Job:GrabAvgCarparklotsMovement',
+            'args': (),
+            'trigger': 'interval',
+            'minutes': 30
         }
     ]
 	SCHEDULER_API_ENABLED = True
